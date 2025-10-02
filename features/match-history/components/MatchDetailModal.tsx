@@ -46,11 +46,9 @@ export default function MatchDetailModal({ match, champions, userPuuid, onClose 
     let team100Gold = 0;
     let team200Gold = 0;
 
-    Object.values(frame.participantFrames).forEach((pf) => {
-      const participant = match.info.participants.find(p => {
-        const participantIndex = match.metadata.participants.indexOf(p.puuid);
-        return participantIndex + 1 === pf.participantId;
-      });
+    Object.entries(frame.participantFrames).forEach(([key, pf]) => {
+      const participantId = parseInt(key);
+      const participant = match.info.participants[participantId - 1]; // participantIdは1始まり、配列は0始まり
 
       if (participant) {
         if (participant.teamId === 100) {
@@ -67,6 +65,16 @@ export default function MatchDetailModal({ match, champions, userPuuid, onClose 
       team200Gold,
     };
   }) || [];
+
+  // デバッグ用ログ
+  if (timeline && goldData.length > 0) {
+    console.log('Timeline data loaded:', {
+      framesCount: timeline.info.frames.length,
+      goldDataCount: goldData.length,
+      sampleData: goldData[0],
+      lastData: goldData[goldData.length - 1]
+    });
+  }
 
   // 最大ゴールド値
   const maxGold = Math.max(
@@ -218,51 +226,95 @@ export default function MatchDetailModal({ match, champions, userPuuid, onClose 
         <Separator />
 
         {/* ゴールドグラフ */}
-        {!loading && goldData.length > 0 && (
-          <div>
-            <h3 className="text-xl font-bold mb-4">ゴールド推移</h3>
+        <div>
+          <h3 className="text-xl font-bold mb-4">ゴールド推移</h3>
+          {loading && (
+            <Card>
+              <CardContent className="pt-6 text-center text-muted-foreground">
+                タイムラインデータを読み込み中...
+              </CardContent>
+            </Card>
+          )}
+          {!loading && goldData.length === 0 && (
+            <Card>
+              <CardContent className="pt-6 text-center text-muted-foreground">
+                タイムラインデータが利用できません
+              </CardContent>
+            </Card>
+          )}
+          {!loading && goldData.length > 0 && (
             <Card>
               <CardContent className="pt-6">
-                <div className="h-64 relative bg-muted/30 rounded-lg p-4">
-                  <svg width="100%" height="100%" className="overflow-visible">
-                    {/* グリッド線 */}
-                    {[0, 25, 50, 75, 100].map(percent => (
-                      <line
-                        key={percent}
-                        x1="0"
-                        y1={`${percent}%`}
-                        x2="100%"
-                        y2={`${percent}%`}
-                        stroke="hsl(var(--border))"
-                        strokeWidth="1"
-                      />
-                    ))}
+                <div className="relative">
+                  {/* 縦軸ラベル（ゴールド） */}
+                  <div className="absolute left-0 top-0 bottom-16 flex flex-col justify-between text-xs text-muted-foreground w-12 pr-2 text-right">
+                    <span>{Math.round(maxGold / 1000)}k</span>
+                    <span>{Math.round(maxGold * 0.75 / 1000)}k</span>
+                    <span>{Math.round(maxGold * 0.5 / 1000)}k</span>
+                    <span>{Math.round(maxGold * 0.25 / 1000)}k</span>
+                    <span>0</span>
+                  </div>
 
-                    {/* ブルーチームライン */}
-                    <polyline
-                      points={goldData.map((d, i) => {
-                        const x = (i / (goldData.length - 1)) * 100;
-                        const y = 100 - (d.team100Gold / maxGold) * 100;
-                        return `${x}%,${y}%`;
-                      }).join(' ')}
-                      fill="none"
-                      stroke="hsl(var(--primary))"
-                      strokeWidth="3"
-                    />
+                  {/* グラフエリア */}
+                  <div className="ml-14">
+                    <div className="h-64 relative bg-muted/30 rounded-lg p-4">
+                      <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" className="overflow-visible">
+                        {/* グリッド線 */}
+                        {[0, 25, 50, 75, 100].map(percent => (
+                          <line
+                            key={percent}
+                            x1="0"
+                            y1={percent}
+                            x2="100"
+                            y2={percent}
+                            stroke="hsl(var(--border))"
+                            strokeWidth="0.3"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                        ))}
 
-                    {/* レッドチームライン */}
-                    <polyline
-                      points={goldData.map((d, i) => {
-                        const x = (i / (goldData.length - 1)) * 100;
-                        const y = 100 - (d.team200Gold / maxGold) * 100;
-                        return `${x}%,${y}%`;
-                      }).join(' ')}
-                      fill="none"
-                      stroke="hsl(var(--destructive))"
-                      strokeWidth="3"
-                    />
-                  </svg>
+                        {/* ブルーチームライン */}
+                        <polyline
+                          points={goldData.map((d, i) => {
+                            const x = (i / (goldData.length - 1)) * 100;
+                            const y = 100 - (d.team100Gold / maxGold) * 100;
+                            return `${x},${y}`;
+                          }).join(' ')}
+                          fill="none"
+                          stroke="hsl(var(--primary))"
+                          strokeWidth="1"
+                          vectorEffect="non-scaling-stroke"
+                        />
+
+                        {/* レッドチームライン */}
+                        <polyline
+                          points={goldData.map((d, i) => {
+                            const x = (i / (goldData.length - 1)) * 100;
+                            const y = 100 - (d.team200Gold / maxGold) * 100;
+                            return `${x},${y}`;
+                          }).join(' ')}
+                          fill="none"
+                          stroke="hsl(var(--destructive))"
+                          strokeWidth="1"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      </svg>
+                    </div>
+
+                    {/* 横軸ラベル（時間） */}
+                    <div className="flex justify-between text-xs text-muted-foreground mt-2 px-4">
+                      {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                        const index = Math.floor((goldData.length - 1) * ratio);
+                        const minutes = Math.floor(goldData[index].timestamp / 60000);
+                        return (
+                          <span key={idx}>{minutes}分</span>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
+
+                {/* 凡例 */}
                 <div className="flex gap-4 justify-center mt-4 text-sm">
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-1 bg-primary"></div>
@@ -275,8 +327,8 @@ export default function MatchDetailModal({ match, champions, userPuuid, onClose 
                 </div>
               </CardContent>
             </Card>
-          </div>
-        )}
+          )}
+        </div>
 
         <Separator />
 
